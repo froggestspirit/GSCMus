@@ -74,7 +74,7 @@ const u8 waveTable[160] = {//the waveforms to choose from, each is 32 bytes, ran
 #define Kick2	    (Drum36 + 7)
 
 
-u8 drumTable[78] = {//the drum pointers
+const u8 drumTable[78] = {//the drum pointers
     Drum00, Snare1, Snare2, Snare3, Snare4, Drum05, Triangle1, Triangle2, HiHat1, Snare5, Snare6, Snare7, HiHat2,
     Drum00, HiHat1, Snare5, Snare6, Snare7, HiHat2, HiHat3, Snare8, Triangle3, Triangle4, Snare9, Snare10, Snare11,
     Drum00, Snare1, Snare9, Snare10, Snare11, Drum05, Triangle1, Triangle2, HiHat1, Snare5, Snare6, Snare7, HiHat2,
