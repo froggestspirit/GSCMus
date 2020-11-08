@@ -151,32 +151,15 @@ const u16 freqTableGB[72] PROGMEM = {//starting with C3, one for each note the g
 };
 
 //GB variables
-u8 NR10Period;
-bool NR10Negate;
-u8 NR10Shift;
-u8 NRx1Duty[2];//only the first 2 channels use this
-u8 NRx1Length[4];//6-bit for channels 1,2,4. 8-bit for channel 3
-u8 NRx2Decay[4];//used for channels 1,2 and 4. channel 4 is index "2", not "3"
-u8 NRx2Velocity[4];
-u8 NRx2Timer[4];
-u8 NRx2Volume[4];
-bool NRx2Sign[4];
-bool NRx4LenEn[4];//length enable flag
-bool NRx4Trigger[4];//Trigger a note
-u16 NRxFreq[4];
-bool NR43Stage;//15 or 7 stage mode?
-u8 NR30DAC;
-u8 NR32Volume;
-u8 NR43;
+u16 NRxFreq [4];
+const u32 NRx1[4] = {NR11, NR21, NR31, NR41};
+const u32 NRx2[4] = {NR12, NR22, NR32, NR42};
+const u32 NRx3[4] = {NR13, NR23, NR33, NR43};
+const u32 NRx4[4] = {NR14, NR24, NR34, NR44};
+
 u8 NR50;
 u8 NR51;
 u8 NR52;
-bool CHENL[4];
-bool CHENR[4];
-u8 CHFPos8[4] asm("CHFPos8") __attribute__ ((used)) ;
-u16 CHFPos8N asm("CHFPos8N") __attribute__ ((used)) ;
-u32 CHFPos[4] asm("CHFPos") __attribute__ ((used)) ;
-u32 CHFreq[4] asm("CHFreq") __attribute__ ((used)) ;
 
 //sequencer variables
 bool playing;
@@ -213,21 +196,13 @@ u8 drumIndex;//where the drumdata array is
 u8 drumTimer;//delays for the drums
 u8 drumSet;//FF if not initialized
 
-void initPlayer(){//set up the variables for starting a song
+void GSCMusInit(){//set up the variables for starting a song
 	for(int i = 0; i < 4; i++){
-		NRx1Length[i] = 0;
-		NRx2Decay[i] = 0;
-		NRx2Velocity[i] = 0;
-		NRx2Timer[i] = 0;
-		NRx2Volume[i] = 0;
-		NRx2Sign[i] = 0;
-		NRx4LenEn[i] = 0;
-		NRx4Trigger[i] = 0;
 		NRxFreq[i] = 0;
-		CHENL[i] = 0;
-		CHENR[i] = 0;
-		CHFPos[i] = 0;
-		CHFreq[i] = 0;
+		*NRx1[i] = 0;
+		*NRx2[i] = 0;
+		*NRx3[i] = 0;
+		*NRx4[i] = 0;
 		trackLooped[i] = 0;
  		trackPos[i] = 0;
 		trackRetPos[i] = 0;
@@ -257,19 +232,7 @@ void initPlayer(){//set up the variables for starting a song
 		trackVibratoState[i] = 0;
 		trackDone[i] = true;
 	}
-	NR10Period = 0;
-	NR10Negate = 0;
-	NR10Shift = 0;
-	NRx1Duty[0] = 0;
-	NRx1Duty[1] = 0;
-	NR30DAC = 1;
-	NR32Volume = 0;
-	NR43Stage = 0;
-	NR43 = 0;
-	NR50 = 0;
-	NR51 = 0;
-	NR52 = 0;
-	for(int i = 0; i < 32; i++) WAV[i] = 0;
+	for(int i = 0; i < 16; i++) *(WAVRAM + i) = 0;
 	drumTimer = 0;
 	drumIndex = 0;
 	drumSet = 0xFF;
@@ -310,7 +273,7 @@ void writeWAV(u8 index){//copies waveform to the WAV buffer
 	}
 }
 
-void executeCommand(u8 channel){//the code to figure out what bytes do what actions
+void execCmd(u8 channel){//the code to figure out what bytes do what actions
 	songFile.seek(trackPos[channel] + songAddress);
 	curCommand = songFile.read();
 	if(curCommand < 0xD0){//notes
@@ -319,18 +282,18 @@ void executeCommand(u8 channel){//the code to figure out what bytes do what acti
 		trackVibratoDelayTimer[channel] = trackVibratoDelay[channel];
 		if(curCommand > 0x0F){//note
 			trackNote[channel] = (curCommand >> 4) - 1;
-			NRxFreq[channel] = pgm_read_word_near(freqTableGB + (((7 - trackOctave[channel]) * 12) + trackNote[channel]) + trackNoteOffset[channel]) + trackTone[channel];
+			NRxFreq[channel] = freqTableGB[(((7 - trackOctave[channel]) * 12) + trackNote[channel]) + trackNoteOffset[channel]] + trackTone[channel];
 			if(channel != 2){
-				writeNRx2(channel,trackEnvelope[channel]);
+				*NRx2[channel] = trackEnvelope[channel];
 			}else{
-				NR32Volume = (trackEnvelope[2] >> 4);
+				*NR32 = (trackEnvelope[2] >> 4);
 			}
 		}else{//rest
-			NRxFreq[channel] = 0;
+			*NRxFreq[channel] = 0;
 			if(channel != 2){
-				writeNRx2(channel,0);
+				*NRx2[channel] = 0;
 			}else{
-				NR32Volume = 0;
+				*NR32 = 0;
 			}
 		}
 	}else{
@@ -368,7 +331,8 @@ void executeCommand(u8 channel){//the code to figure out what bytes do what acti
 				trackPos[channel]++;
 				curCommand = songFile.read();
 				if(channel < 2){
-					NRx1Duty[channel] = (curCommand << 3);
+					*NRx1[channel] &= 0x3F;
+					*NRx1[channel] |= (curCommand << 6);
 					trackUseArpDuty[channel] = false;
 				}
 			break;
@@ -534,7 +498,7 @@ void executeCommand(u8 channel){//the code to figure out what bytes do what acti
 					trackRetPos[channel] = 0;
 				}else{
 					trackDone[channel] = true;
-					CHENL[channel] = CHENR[channel] = 0;
+					//CHENL[channel] = CHENR[channel] = 0;
 					tracksComplete |= (0x11 << channel);
 				}
 			break;
@@ -543,7 +507,7 @@ void executeCommand(u8 channel){//the code to figure out what bytes do what acti
 	trackPos[channel]++;
 }
 
-void executeCommandNSE(){//the code to figure out what bytes do what actions in noise channel
+void execCmdNSE(){//the code to figure out what bytes do what actions in noise channel
 	songFile.seek(trackPos[3] + songAddress);
 	curCommand = songFile.read();
 	if(curCommand < 0xD0){//notes
@@ -552,10 +516,12 @@ void executeCommandNSE(){//the code to figure out what bytes do what actions in 
 			trackNote[3] = (curCommand >> 4);
 			drumTimer = 0;
 			drumIndex = drumTable[(drumSet * 13) + trackNote[3]];
-			NRxFreq[3] = 0;
+			*NR43 = 0;
+			*NR44 = 0;
 		}else{//rest
-			NRxFreq[3] = 0xFFFF;
-			writeNRx2(2,0);
+			*NR42 = 0;
+			*NR43 = 0xFF;
+			*NR44 = 0xFF;
 		}
 	}else{
 		switch(curCommand){
@@ -731,7 +697,7 @@ void executeCommandNSE(){//the code to figure out what bytes do what actions in 
 					trackRetPos[3] = 0;
 				}else{
 					trackDone[3] = true;
-					CHENL[3] = CHENR[3] = 0;
+					//CHENL[3] = CHENR[3] = 0;
 					tracksComplete |= (0x88);
 				}
 			break;
@@ -740,9 +706,9 @@ void executeCommandNSE(){//the code to figure out what bytes do what actions in 
 	trackPos[3]++;
 }
 
-void playerProcess(u8 channel){//main engine code
-	while(trackNoteLength[channel] <= 0) executeCommand(channel);
-	if(NRxFreq[channel] > 0){
+void GSCMusProcess(u8 channel){//main engine code
+	while(trackNoteLength[channel] <= 0) execCmd(channel);
+	if(NRxFreq[channel] != 0){
 		if(trackVibratoDepth[channel] > 0){
 			if(trackVibratoDelayTimer[channel] == 0){
 				if(trackVibratoTimer[channel] == 0){
@@ -766,25 +732,26 @@ void playerProcess(u8 channel){//main engine code
 				trackVibratoDelayTimer[channel]--;
 			}
 		}
-  		NRxFreq[channel] &  = 0x7FF;
-  		CHFreq[channel] = getFreq(NRxFreq[channel]);
+  		NRxFreq[channel] &= 0x7FF;
+		*NRx3[channel] = NRxFreq[channel] & 0xFF;
+		*NRx4[channel] &= 0xF8;
+		*NRx4[channel] |= NRxFreq[channel] >> 8;
 	}
 	trackNoteLength[channel] -= 0x100;
 }
 
-void playerProcessNSE(){//main engine code for noise channel
-	while(trackNoteLength[3] <= 0) executeCommandNSE();
+void GSCMusProcessNSE(){//main engine code for noise channel
+	while(trackNoteLength[3] <= 0) execCmdNSE();
 	if(NRxFreq[3] < 0xFFFF){
 		if(drumTimer == 0){
 			if(drumData[drumIndex] < 0xFF){
 				drumTimer = (drumData[drumIndex++] & 0xF);
-				trackEnvelope[2] = drumData[drumIndex++];
-				writeNRx2(2,trackEnvelope[2]);
-				NRxFreq[3] = drumData[drumIndex++];
-				NR43Stage = NRxFreq[3] & 8;
-				CHFreq[3] = getNSEFreq(NRxFreq[3]);
+				*NR42  = drumData[drumIndex++];
+				*NR44 = drumData[drumIndex++];
 			}else{
-				NRxFreq[3] = 0xFFFF;
+				*NR42 = 0;
+				*NR43 = 0xFF;
+				*NR44 = 0xFF;
 			}
 		}else{
 			drumTimer--;
@@ -793,14 +760,14 @@ void playerProcessNSE(){//main engine code for noise channel
 	trackNoteLength[3] -= 0x100;
 }
 
-void loop(){// called at ~60Hz
+void GSCMusLoop(){// called at ~60Hz
     //sequencer code
     for(u8 i = 0; i < 3; i++){
         if(!trackDone[i]){
-            playerProcess(i);
+            GSCMusProcess(i);
         }
     }
     if(!trackDone[3]){
-        playerProcessNSE();
+        GSCMusProcessNSE();
     }
 }
