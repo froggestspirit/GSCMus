@@ -1,25 +1,7 @@
-#define NR10    0x04000060 //Channel 1 Sweep register (R/W)
-#define NR11    0x04000062 //Channel 1 Sound length/Wave pattern duty (R/W)
-#define NR12    0x04000063 //Channel 1 Volume Envelope (R/W)
-#define NR13    0x04000064 //Channel 1 Frequency lo (Write Only)
-#define NR14    0x04000065 //Channel 1 Frequency hi (R/W)
+//Plays GSC format binary music
+//Credits: FroggestSpirit, MCboy
 
-#define NR21    0x04000068 //Channel 2 Sound length/Wave pattern duty (R/W)
-#define NR22    0x04000069 //Channel 2 Volume Envelope (R/W)
-#define NR23    0x0400006C //Channel 2 Frequency lo (Write Only)
-#define NR24    0x0400006D //Channel 2 Frequency hi (R/W)
-
-#define NR30    0x04000070 //Channel 3 Sound on/off (R/W)
-#define NR31    0x04000072 //Channel 3 Sound Length
-#define NR32    0x04000073 //Channel 3 Select output level (R/W)
-#define NR33    0x04000074 //Channel 3 Frequency's lower data (W)
-#define NR34    0x04000075 //Channel 3 Frequency's higher data (R/W)
-#define WAVRAM  0x04000090 //Wave Pattern RAM
-
-#define NR41    0x04000078 //Channel 4 Sound Length (R/W)
-#define NR42    0x04000079 //Channel 4 Volume Envelope (R/W)
-#define NR43    0x0400007C //Channel 4 Polynomial Counter (R/W)
-#define NR44    0x0400007D //Channel 4 Counter/consecutive; Inital (R/W)
+#include "gba/gba.h"
 
 const u8 waveTable[160] = {//the waveforms to choose from, each is 32 bytes, ranging from 0-15. More can be added.
 	0x02, 0x46, 0x8A, 0xCE, 0xFF, 0xFE, 0xED, 0xDC, 0xCB, 0xA9, 0x87, 0x65, 0x44, 0x33, 0x22, 0x11,
@@ -151,18 +133,15 @@ const u16 freqTableGB[72] = {//starting with C3, one for each note the gameboy c
 };
 
 //GB variables
+#define WAVRAM ((u8*)&REG_WAVE_RAM0)
 u16 NRxFreq [4];
-const u32 NRx1[4] = {NR11, NR21, NR31, NR41};
-const u32 NRx2[4] = {NR12, NR22, NR32, NR42};
-const u32 NRx3[4] = {NR13, NR23, NR33, NR43};
-const u32 NRx4[4] = {NR14, NR24, NR34, NR44};
-
-u8 NR50;
-u8 NR51;
-u8 NR52;
+vu8 * const NRx1[4] = {&REG_NR11, &REG_NR21, &REG_NR31, &REG_NR41};
+vu8 * const NRx2[4] = {&REG_NR12, &REG_NR22, &REG_NR32, &REG_NR42};
+vu8 * const NRx3[4] = {&REG_NR13, &REG_NR23, &REG_NR33, &REG_NR43};
+vu8 * const NRx4[4] = {&REG_NR14, &REG_NR24, &REG_NR34, &REG_NR44};
 
 //sequencer variables
-bool playing;
+bool8 playing;
 u16 tempo;
 u8 curCommand;
 u8 trackLooped[4];//how many times the track looped, for limiting playback to 2 times before changing song
@@ -172,7 +151,7 @@ u16 trackPos[4];//position in the song array of each track
 u16 trackRetPos[4];//position in the song array of each track
 u16 trackLoopTo[4];
 u8 trackLoopNumber[4];
-bool trackLooping[4];
+bool8 trackLooping[4];
 u16 trackDelay[4];//time before next event is read
 u16 trackTone[4];
 u8 trackNote[4];
@@ -182,7 +161,7 @@ u8 trackSpeed[4];
 u8 trackOctave[4];
 s32 trackNoteLength[4];
 u8 trackArpDuty[4 * 4];
-bool trackUseArpDuty[4];
+bool8 trackUseArpDuty[4];
 u8 trackVibratoDepth[4];
 u8 trackVibratoDepthAdd[4];
 u8 trackVibratoDepthSub[4];
@@ -191,14 +170,14 @@ u8 trackVibratoDelay[4];
 u8 trackVibratoDelayTimer[4];
 u8 trackVibratoTimer[4];
 u8 trackVibratoState[4];
-bool trackDone[4];//track is done playing
+bool8 trackDone[4];//track is done playing
 u8 drumIndex;//where the drumdata array is
 u8 drumTimer;//delays for the drums
 u8 drumSet;//FF if not initialized
-int songAddress;
-int songPos;
+vu8 * songAddress;
+u32 songPos;
 
-void GSCMusInit(int songLoc){//set up the variables for starting a song
+void GSCMusInit(u8 * songLoc){//set up the variables for starting a song
 	for(int i = 0; i < 4; i++){
 		NRxFreq[i] = 0;
 		*NRx1[i] = 0;
@@ -210,7 +189,7 @@ void GSCMusInit(int songLoc){//set up the variables for starting a song
 		trackRetPos[i] = 0;
 		trackLoopTo[i] = 0;
 		trackLoopNumber[i] = 0xFF;
-		trackLooping[i] = false;
+		trackLooping[i] = FALSE;
 		trackDelay[i] = 0;
 		trackTone[i] = 0;
 		trackNote[i] = 0;
@@ -223,7 +202,7 @@ void GSCMusInit(int songLoc){//set up the variables for starting a song
 		trackArpDuty[(i * 4) + 1] = 0;
 		trackArpDuty[(i * 4) + 2] = 0;
 		trackArpDuty[(i * 4) + 3] = 0;
-		trackUseArpDuty[i] = false;
+		trackUseArpDuty[i] = FALSE;
 		trackVibratoDepth[i] = 0;
 		trackVibratoDepthAdd[i] = 0;
 		trackVibratoDepthSub[i] = 0;
@@ -232,13 +211,13 @@ void GSCMusInit(int songLoc){//set up the variables for starting a song
 		trackVibratoDelayTimer[i] = 0;
 		trackVibratoTimer[i] = 0;
 		trackVibratoState[i] = 0;
-		trackDone[i] = true;
+		trackDone[i] = TRUE;
 	}
 	for(int i = 0; i < 16; i++) *(WAVRAM + i) = 0;
 	drumTimer = 0;
 	drumIndex = 0;
 	drumSet = 0xFF;
-	playing = false;
+	playing = FALSE;
 	tempo = 0x0100;
 	fadeTimer = 0x00;
 	songAddress = songLoc;
@@ -251,8 +230,8 @@ void GSCMusInit(int songLoc){//set up the variables for starting a song
 	while(curCommand > 0){
 		i = *(songAddress + songPos++);//track number
 		i &= 3;
-		trackPos[i] = (*(songAddress + songPos++) + (*(songAddress + songPos++) << 8)) - songOffset;
-		trackDone[i] = false;
+		trackPos[i] = (*(songAddress + songPos++) + (*(songAddress + songPos++) << 8));
+        trackDone[i] = FALSE;
 		tracksComplete ^= (0x11 << i);
 		curCommand--;
 	}
@@ -262,6 +241,7 @@ void writeWAV(u8 index){//copies waveform to the WAV buffer
 	for(u8 i = 0; i < 16; i++){
 		*(WAVRAM + i) = waveTable[index + i];
 	}
+	REG_NR30 ^= 0x40; //swap the bank to use the new waveform 
 }
 
 void execCmd(u8 channel){//the code to figure out what bytes do what actions
@@ -277,14 +257,17 @@ void execCmd(u8 channel){//the code to figure out what bytes do what actions
 			if(channel != 2){
 				*NRx2[channel] = trackEnvelope[channel];
 			}else{
-				*NR32 = (trackEnvelope[2] >> 4);
+				REG_NR32 = (trackEnvelope[2] & 0x70) << 1;
+				REG_NR30 |= 0x80; //turn on channel 3
 			}
+            *NRx4[channel] |= 0x80;
 		}else{//rest
-			*NRxFreq[channel] = 0;
+			NRxFreq[channel] = 0;
 			if(channel != 2){
 				*NRx2[channel] = 0;
 			}else{
-				*NR32 = 0;
+				REG_NR32 = 0;
+				REG_NR30 &= 0x7F; //turn off channel 3
 			}
 		}
 	}else{
@@ -302,6 +285,10 @@ void execCmd(u8 channel){//the code to figure out what bytes do what actions
 			case 0xD8://note length  +  intensity
 				trackPos[channel]++;
 				trackSpeed[channel] = *(songAddress + songPos++);
+				trackPos[channel]++;
+  				trackEnvelope[channel] = *(songAddress + songPos++);
+  				if(channel == 2) writeWAV((trackEnvelope[2] & 0x0F) << 4);
+			break;
 			case 0xDC://intensity
 				trackPos[channel]++;
   				trackEnvelope[channel] = *(songAddress + songPos++);
@@ -324,7 +311,7 @@ void execCmd(u8 channel){//the code to figure out what bytes do what actions
 				if(channel < 2){
 					*NRx1[channel] &= 0x3F;
 					*NRx1[channel] |= (curCommand << 6);
-					trackUseArpDuty[channel] = false;
+					trackUseArpDuty[channel] = FALSE;
 				}
 			break;
 			case 0xDD://update sound status
@@ -338,7 +325,7 @@ void execCmd(u8 channel){//the code to figure out what bytes do what actions
 					trackArpDuty[(channel << 2) + 1] = (curCommand >> 4) & 3;
 					trackArpDuty[(channel << 2) + 2] = (curCommand >> 2) & 3;
 					trackArpDuty[(channel << 2) + 3] = (curCommand & 3);
-					trackUseArpDuty[channel] = true;
+					trackUseArpDuty[channel] = TRUE;
 				}
 			break;
 			case 0xDF://sound on/off
@@ -450,45 +437,45 @@ void execCmd(u8 channel){//the code to figure out what bytes do what actions
 				trackPos[channel]++;
 				trackLoopTo[channel] = *(songAddress + songPos++);
 				trackPos[channel]++;
-				trackLoopTo[channel] += (*(songAddress + songPos++) << 8) - (songOffset + 1);
-				trackPos[channel] = trackLoopTo[channel];
+				trackLoopTo[channel] += (*(songAddress + songPos++) << 8);
+				trackPos[channel] = trackLoopTo[channel] - 1;
 			break;
 			case 0xFD://loop
 				trackPos[channel]++;
 				curCommand = *(songAddress + songPos++);
 				if(!trackLooping[channel]){
 					trackLoopNumber[channel] = curCommand;
-					if(trackLoopNumber[channel] > 0) trackLooping[channel] = true;//don't set if it's an infinite loop
+					if(trackLoopNumber[channel] > 0) trackLooping[channel] = TRUE;//don't set if it's an infinite loop
 				}
 				trackPos[channel]++;
 				trackLoopTo[channel] = *(songAddress + songPos++);
 				trackPos[channel]++;
-				trackLoopTo[channel] += (*(songAddress + songPos++) << 8) - (songOffset + 1);
+				trackLoopTo[channel] += (*(songAddress + songPos++) << 8);
 				trackLoopNumber[channel]--;
 				if(!trackLooping[channel]){//infinite loop
-					trackPos[channel] = trackLoopTo[channel];
+					trackPos[channel] = trackLoopTo[channel] - 1;
 					trackLooped[channel]++;
 					if(trackLooped[channel] == 2) tracksComplete |= (1 << channel);
 				}else if(trackLoopNumber[channel] > 0){
-					trackPos[channel] = trackLoopTo[channel];
+					trackPos[channel] = trackLoopTo[channel] - 1;
 				}else{
-					trackLooping[channel] = false;
+					trackLooping[channel] = FALSE;
 				}
 			break;
 			case 0xFE://call
 				trackPos[channel]++;
 				trackLoopTo[channel] = *(songAddress + songPos++);
 				trackPos[channel]++;
-				trackLoopTo[channel] += (*(songAddress + songPos++) << 8) - (songOffset + 1);
-				trackRetPos[channel] = trackPos[channel];
-				trackPos[channel] = trackLoopTo[channel];
+				trackLoopTo[channel] += (*(songAddress + songPos++) << 8);
+				trackRetPos[channel] = trackPos[channel] + 1;
+				trackPos[channel] = trackLoopTo[channel] - 1;
 			break;
 			case 0xFF://return
 				if(trackRetPos[channel] > 0){
-					trackPos[channel] = trackRetPos[channel];
+					trackPos[channel] = trackRetPos[channel] - 1;
 					trackRetPos[channel] = 0;
 				}else{
-					trackDone[channel] = true;
+					trackDone[channel] = TRUE;
 					tracksComplete |= (0x11 << channel);
 				}
 			break;
@@ -506,12 +493,10 @@ void execCmdNSE(){//the code to figure out what bytes do what actions in noise c
 			trackNote[3] = (curCommand >> 4);
 			drumTimer = 0;
 			drumIndex = drumTable[(drumSet * 13) + trackNote[3]];
-			*NR43 = 0;
-			*NR44 = 0;
+			NRxFreq[3] = 0;
 		}else{//rest
-			*NR42 = 0;
-			*NR43 = 0xFF;
-			*NR44 = 0xFF;
+			REG_NR42 = 0;
+			NRxFreq[3] = 0xFFFF;
 		}
 	}else{
 		switch(curCommand){
@@ -648,45 +633,45 @@ void execCmdNSE(){//the code to figure out what bytes do what actions in noise c
 				trackPos[3]++;
 				trackLoopTo[3] = *(songAddress + songPos++);
 				trackPos[3]++;
-				trackLoopTo[3] += (*(songAddress + songPos++) << 8) - (songOffset + 1);
-				trackPos[3] = trackLoopTo[3];
+				trackLoopTo[3] += (*(songAddress + songPos++) << 8);
+				trackPos[3] = trackLoopTo[3] - 1;
 			break;
 			case 0xFD://loop
 				trackPos[3]++;
 				curCommand = *(songAddress + songPos++);
 				if(!trackLooping[3]){
 					trackLoopNumber[3] = curCommand;
-					if(trackLoopNumber[3] > 0) trackLooping[3] = true;//don't set if it's an infinite loop
+					if(trackLoopNumber[3] > 0) trackLooping[3] = TRUE;//don't set if it's an infinite loop
 				}
 				trackPos[3]++;
 				trackLoopTo[3] = *(songAddress + songPos++);
 				trackPos[3]++;
-				trackLoopTo[3] += (*(songAddress + songPos++) << 8) - (songOffset + 1);
+				trackLoopTo[3] += (*(songAddress + songPos++) << 8);
 				trackLoopNumber[3]--;
 				if(!trackLooping[3]){//infinite loop
-					trackPos[3] = trackLoopTo[3];
+					trackPos[3] = trackLoopTo[3] - 1;
 					trackLooped[3]++;
 					if(trackLooped[3] == 2) tracksComplete |= (8);
 				}else if(trackLoopNumber[3] > 0){
-					trackPos[3] = trackLoopTo[3];
+					trackPos[3] = trackLoopTo[3] - 1;
 				}else{
-					trackLooping[3] = false;
+					trackLooping[3] = FALSE;
 				}
 			break;
 			case 0xFE://call
 				trackPos[3]++;
 				trackLoopTo[3] = *(songAddress + songPos++);
 				trackPos[3]++;
-				trackLoopTo[3] += (*(songAddress + songPos++) << 8) - (songOffset + 1);
-				trackRetPos[3] = trackPos[3];
-				trackPos[3] = trackLoopTo[3];
+				trackLoopTo[3] += (*(songAddress + songPos++) << 8);
+				trackRetPos[3] = trackPos[3] + 1;
+				trackPos[3] = trackLoopTo[3] - 1;
 			break;
 			case 0xFF://return
 				if(trackRetPos[3] > 0){
-					trackPos[3] = trackRetPos[3];
+					trackPos[3] = trackRetPos[3] - 1;
 					trackRetPos[3] = 0;
 				}else{
-					trackDone[3] = true;
+					trackDone[3] = TRUE;
 					tracksComplete |= (0x88);
 				}
 			break;
@@ -735,13 +720,13 @@ void GSCMusProcessNSE(){//main engine code for noise channel
 		if(drumTimer == 0){
 			if(drumData[drumIndex] < 0xFF){
 				drumTimer = (drumData[drumIndex++] & 0xF);
-				*NR42  = drumData[drumIndex++];
-				*NR44 = drumData[drumIndex++];
-			}else{
-				*NR42 = 0;
-				*NR43 = 0xFF;
-				*NR44 = 0xFF;
-			}
+				REG_NR42  = drumData[drumIndex++];
+				REG_NR43 = drumData[drumIndex++];
+				REG_NR44 = 0x80;
+			}/*else{
+				REG_NR42 = 0;
+				NRxFreq[3] = 0xFFFF;
+			}*/
 		}else{
 			drumTimer--;
 		}
