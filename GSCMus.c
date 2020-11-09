@@ -489,7 +489,7 @@ void execCmdNSE(){//the code to figure out what bytes do what actions in noise c
 	curCommand = *(songAddress + songPos++);
 	if(curCommand < 0xD0){//notes
 		trackNoteLength[3] += ((((curCommand & 0x0F) + 1) * trackSpeed[3]) & 0xFF) * tempo;
-		if(curCommand > 0x0F){//note
+		if(curCommand > 0x0F && drumSet < 0xFE){//note
 			trackNote[3] = (curCommand >> 4);
 			drumTimer = 0;
 			drumIndex = drumTable[(drumSet * 13) + trackNote[3]];
@@ -548,8 +548,8 @@ void execCmdNSE(){//the code to figure out what bytes do what actions in noise c
 			break;
 			case 0xE3://music noise sampling
 				trackPos[3]++;
-				if(drumSet < 0xFE) drumSet = 0xFE;
-				if(drumSet == 0xFF) drumSet = *(songAddress + songPos++);
+				if(drumSet < 0xFE) drumSet = 0xFE; //comment this out to allow changing drums multiple times per song (normal behavior mutes on calling more than once)
+				if(drumSet != 0xFE) drumSet = *(songAddress + songPos++);
 			break;
 			case 0xE4://force panning
 				trackPos[3]++;
@@ -719,7 +719,7 @@ void GSCMusProcessNSE(){//main engine code for noise channel
 	if(NRxFreq[3] < 0xFFFF){
 		if(drumTimer == 0){
 			if(drumData[drumIndex] < 0xFF){
-				drumTimer = (drumData[drumIndex++] & 0xF);
+				drumTimer = (drumData[drumIndex++] & 0xF) + 1;
 				REG_NR42  = drumData[drumIndex++];
 				REG_NR43 = drumData[drumIndex++];
 				REG_NR44 = 0x80;
