@@ -2,6 +2,7 @@
 //Credits: FroggestSpirit, MCboy
 
 #include "gba/gba.h"
+#include "m4a.h"
 
 const u8 waveTable[160] = {//the waveforms to choose from, each is 32 bytes, ranging from 0-15. More can be added.
 	0x02, 0x46, 0x8A, 0xCE, 0xFF, 0xFE, 0xED, 0xDC, 0xCB, 0xA9, 0x87, 0x65, 0x44, 0x33, 0x22, 0x11,
@@ -141,7 +142,7 @@ vu8 * const NRx3[4] = {&REG_NR13, &REG_NR23, &REG_NR33, &REG_NR43};
 vu8 * const NRx4[4] = {&REG_NR14, &REG_NR24, &REG_NR34, &REG_NR44};
 
 //sequencer variables
-bool8 playing;
+bool8 playing = FALSE;
 u16 tempo;
 u8 curCommand;
 u8 trackLooped[4];//how many times the track looped, for limiting playback to 2 times before changing song
@@ -177,7 +178,12 @@ u8 drumSet;//FF if not initialized
 vu8 * songAddress;
 u32 songPos;
 
-void GSCMusInit(u8 * songLoc){//set up the variables for starting a song
+void gscMusPlay(u8 * songLoc){//set up the variables for starting a song
+	m4aMPlayAllStop();
+	REG_NR50 = 0x77;
+	REG_NR51 = 0xFF;
+	REG_SOUNDCNT_H &= 0xFFFC;
+	REG_SOUNDCNT_H |= 0x0001; //set to half volume PSG
 	for(int i = 0; i < 4; i++){
 		NRxFreq[i] = 0;
 		*NRx1[i] = 0;
@@ -217,7 +223,6 @@ void GSCMusInit(u8 * songLoc){//set up the variables for starting a song
 	drumTimer = 0;
 	drumIndex = 0;
 	drumSet = 0xFF;
-	playing = FALSE;
 	tempo = 0x0100;
 	fadeTimer = 0x00;
 	songAddress = songLoc;
@@ -235,6 +240,7 @@ void GSCMusInit(u8 * songLoc){//set up the variables for starting a song
 		tracksComplete ^= (0x11 << i);
 		curCommand--;
 	}
+	playing = TRUE;
 }
 
 void writeWAV(u8 index){//copies waveform to the WAV buffer
@@ -680,7 +686,7 @@ void execCmdNSE(){//the code to figure out what bytes do what actions in noise c
 	trackPos[3]++;
 }
 
-void GSCMusProcess(u8 channel){//main engine code
+void gscMusProcess(u8 channel){//main engine code
 	while(trackNoteLength[channel] <= 0) execCmd(channel);
 	if(NRxFreq[channel] != 0){
 		if(trackVibratoDepth[channel] > 0){
@@ -714,7 +720,7 @@ void GSCMusProcess(u8 channel){//main engine code
 	trackNoteLength[channel] -= 0x100;
 }
 
-void GSCMusProcessNSE(){//main engine code for noise channel
+void gscMusProcessNSE(){//main engine code for noise channel
 	while(trackNoteLength[3] <= 0) execCmdNSE();
 	if(NRxFreq[3] < 0xFFFF){
 		if(drumTimer == 0){
@@ -734,14 +740,30 @@ void GSCMusProcessNSE(){//main engine code for noise channel
 	trackNoteLength[3] -= 0x100;
 }
 
-void GSCMusLoop(){// called at ~60Hz
+void gscMusLoop(){// called at ~60Hz
     //sequencer code
-    for(u8 i = 0; i < 3; i++){
-        if(!trackDone[i]){
-            GSCMusProcess(i);
-        }
-    }
-    if(!trackDone[3]){
-        GSCMusProcessNSE();
-    }
+	if(playing){
+		for(u8 i = 0; i < 3; i++){
+			if(!trackDone[i]){
+				gscMusProcess(i);
+			}
+		}
+		if(!trackDone[3]){
+			gscMusProcessNSE();
+		}
+		if(tracksComplete == 0xFF) gscMusStop();
+	}
+}
+
+void gscMusStop(){
+	playing = FALSE;
+	for(int i = 0; i < 4; i++){
+		NRxFreq[i] = 0;
+		//*NRx1[i] = 0;
+		//*NRx2[i] = 0;
+		//*NRx3[i] = 0;
+		//*NRx4[i] = 0;
+	}
+	REG_SOUNDCNT_H &= 0xFFFC;
+	REG_SOUNDCNT_H |= 0x0010; //set to full volume PSG
 }
