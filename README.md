@@ -77,7 +77,8 @@ under m4aMPlayStop(mplay->info);
 ```
 
 Known Issues/Todo:
-
+```
 Sound Effects that use the PSG channels can mess up the song
 Song fade out is still needed
 Drums don't sound identical to the GBC versions
+```
