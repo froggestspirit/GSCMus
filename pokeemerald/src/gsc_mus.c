@@ -461,7 +461,6 @@ void execCmd(u8 channel){//the code to figure out what bytes do what actions
 				if(!trackLooping[channel]){//infinite loop
 					trackPos[channel] = trackLoopTo[channel] - 1;
 					trackLooped[channel]++;
-					if(trackLooped[channel] == 2) tracksComplete |= (1 << channel);
 				}else if(trackLoopNumber[channel] > 0){
 					trackPos[channel] = trackLoopTo[channel] - 1;
 				}else{
@@ -657,7 +656,6 @@ void execCmdNSE(){//the code to figure out what bytes do what actions in noise c
 				if(!trackLooping[3]){//infinite loop
 					trackPos[3] = trackLoopTo[3] - 1;
 					trackLooped[3]++;
-					if(trackLooped[3] == 2) tracksComplete |= (8);
 				}else if(trackLoopNumber[3] > 0){
 					trackPos[3] = trackLoopTo[3] - 1;
 				}else{
@@ -759,11 +757,12 @@ void gscMusStop(){
 	playing = FALSE;
 	for(int i = 0; i < 4; i++){
 		NRxFreq[i] = 0;
-		//*NRx1[i] = 0;
-		//*NRx2[i] = 0;
-		//*NRx3[i] = 0;
-		//*NRx4[i] = 0;
+		*NRx1[i] = 0;
+		*NRx2[i] = 0;
+		*NRx3[i] = 0;
+		*NRx4[i] = 0;
 	}
+	REG_NR30 = 0x80;
 	REG_SOUNDCNT_H &= 0xFFFC;
 	REG_SOUNDCNT_H |= 0x0010; //set to full volume PSG
 }
