@@ -12,23 +12,34 @@ To install in pokeemerald, copy the contents of this pokeemerald folder to your 
 First time installation steps (after this initial install, only the above step needs to be repeated to update songs):
 
 1. in include/constants/songs.h, near the bottom of the file, add this after the last song and before MUS_ROUTE118:
+```C
 #define GSC_MUS_START               610
 #include "constants/gsc_songs.h"
+```
 the 610 should be adjusted if you have changed the amount of normal m4a music, so it is the next number after the last song
 
 2. in include/gba/m4a_internal.h, search for:
+```C
 extern const struct Song gSongTable[];
+```
 below it, add:
+```C
 extern const struct Song gscSongTable[];
+```
 
 3. in src/m4a.c, add:
+```C
 #include "gsc_mus.h"
 #include "constants/songs.h"
+```
 under the other includes
 
 4. in src/m4a.c, search for:
+```C
 void m4aSongNumStart(u16 n)
+```
 replace the function with this:
+```C
 void m4aSongNumStart(u16 n)
 {
     const struct MusicPlayer *mplayTable = gMPlayTable;
@@ -46,17 +57,24 @@ void m4aSongNumStart(u16 n)
         MPlayStart(mplay->info, song->header);
     }
 }
+```
 
 5. in src/m4a.c, search for void m4aSoundMain(void) and add:
+```C
 gscMusLoop();
+```
 under SoundMain();
 
 6. in src/m4a.c, search for void m4aSongNumStop(u16 n) and add:
+```C
 gscMusStop();
+```
 under m4aMPlayStop(mplay->info);
 
 7. in data/sound_data.s under .include "sound/song_table.inc", add:
+```C
 	.include "sound/gsc_songs.inc"
+```
 
 Known Issues/Todo:
 
